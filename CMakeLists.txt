@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(EasyPad VERSION 1.0.0 LANGUAGES CXX)
+project(EasyPad VERSION 1.1.0 LANGUAGES CXX)
 
 set(EASYPAD_DEFAULT_WIDTH  600)
 set(EASYPAD_DEFAULT_HEIGHT 200)
