@@ -1,0 +1,8 @@
+#pragma once
+
+namespace Config {
+    inline constexpr auto AppName       = "@PROJECT_NAME@";
+    inline constexpr auto AppVersion    = "@PROJECT_VERSION@";
+    inline constexpr int  DefaultWidth  = @EASYPAD_DEFAULT_WIDTH@;
+    inline constexpr int  DefaultHeight = @EASYPAD_DEFAULT_HEIGHT@;
+}
