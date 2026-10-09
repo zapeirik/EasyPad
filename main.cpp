@@ -12,10 +12,17 @@
 #include <QDialogButtonBox>
 #include <QKeySequence>
 #include <QSettings>
+#include <QFileDialog>
+#include <QFile>
+#include <QSaveFile>
+#include <QMessageBox>
+#include <QTextStream>
+#include <QFileInfo>
 #include "Config.h"
 
 const int default_fontsize = 16;
 const QString header_text = QString(Config::AppName) + " " + QString(Config::AppVersion);
+const QString saveFileDialogErrorTitle = "Save failed";
 
 // Opens a modal Settings dialog for choosing font family and size.
 // Changes preview live; on OK they are applied and saved via QSettings.
@@ -66,6 +73,22 @@ static void openSettingsDialog(QPlainTextEdit *editor, QWidget *parent)
     }
 }
 
+static bool saveToFile(QPlainTextEdit *editor, const QString &path, QWidget *parent)
+{
+    QSaveFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QMessageBox::warning(parent, saveFileDialogErrorTitle, file.errorString());
+        return false;
+    }
+    QTextStream out(&file);
+    out << editor->toPlainText();
+    if (!file.commit()) {
+        QMessageBox::warning(parent, saveFileDialogErrorTitle, file.errorString());
+        return false;
+    }
+    return true;
+}
+
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
@@ -77,6 +100,7 @@ int main(int argc, char *argv[])
     window.setWindowTitle(header_text);
 
     auto *editor = new QPlainTextEdit(&window);
+    QString currentPath;
 
     window.setCentralWidget(editor);
     window.resize(Config::DefaultWidth, Config::DefaultHeight);
@@ -96,6 +120,26 @@ int main(int argc, char *argv[])
         openSettingsDialog(editor, &window);
     });
 
+    QMenu *fileMenu = window.menuBar()->addMenu("File");
+    QAction *saveAs = fileMenu->addAction("Save As…");
+    saveAs->setShortcut(QKeySequence::SaveAs);
+    QObject::connect(saveAs, &QAction::triggered, &window, [=, &currentPath, &window]() {
+        QString path = QFileDialog::getSaveFileName(&window, "Save As", currentPath);
+        if (!path.isEmpty() && saveToFile(editor, path, &window)) {
+            currentPath = path;
+            window.setWindowTitle(QFileInfo(path).fileName() + " - " + header_text);
+        }
+    });
+
+    QAction *save = fileMenu->addAction("Save");
+    save->setShortcut(QKeySequence::Save);   // Cmd+S on macOS, Ctrl+S elsewhere
+    QObject::connect(save, &QAction::triggered, &window, [=, &currentPath, &window]() {
+    if (currentPath.isEmpty())
+        saveAs->trigger();
+    else
+        saveToFile(editor, currentPath, &window);
+    });
+    
     window.show();
 
     return app.exec();
