@@ -18,6 +18,9 @@
 #include <QMessageBox>
 #include <QTextStream>
 #include <QFileInfo>
+#include <QCloseEvent>
+#include <QTextDocument>
+#include <functional>
 #include "Config.h"
 
 const int default_fontsize = 16;
@@ -86,8 +89,25 @@ static bool saveToFile(QPlainTextEdit *editor, const QString &path, QWidget *par
         QMessageBox::warning(parent, saveFileDialogErrorTitle, file.errorString());
         return false;
     }
+    editor->document()->setModified(false);
     return true;
 }
+
+// Main window that asks before closing if there are unsaved changes.
+class MainWindow : public QMainWindow
+{
+public:
+    std::function<bool()> confirmClose;
+
+protected:
+    void closeEvent(QCloseEvent *event) override
+    {
+        if (!confirmClose || confirmClose())
+            event->accept();
+        else
+            event->ignore();
+    }
+};
 
 int main(int argc, char *argv[])
 {
@@ -96,7 +116,7 @@ int main(int argc, char *argv[])
     app.setOrganizationName(Config::AppName);
     app.setApplicationName(Config::AppName);
 
-    QMainWindow window;
+    MainWindow window;
     window.setWindowTitle(header_text);
 
     auto *editor = new QPlainTextEdit(&window);
@@ -139,7 +159,23 @@ int main(int argc, char *argv[])
     else
         saveToFile(editor, currentPath, &window);
     });
-    
+
+    // Returns true if it is OK to close: nothing unsaved, saved, or discarded.
+    window.confirmClose = [=, &window]() {
+        if (!editor->document()->isModified())
+            return true;
+        auto answer = QMessageBox::warning(
+            &window, "Unsaved changes",
+            "Do you want to save your changes before quitting?",
+            QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+            QMessageBox::Save);
+        if (answer == QMessageBox::Save) {
+            save->trigger();
+            return !editor->document()->isModified();
+        }
+        return answer == QMessageBox::Discard;
+    };
+
     window.show();
 
     return app.exec();
