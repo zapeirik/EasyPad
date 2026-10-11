@@ -93,6 +93,25 @@ static bool saveToFile(QPlainTextEdit *editor, const QString &path, QWidget *par
     return true;
 }
 
+static bool setNewFile(QPlainTextEdit *editor)
+{
+    editor->clear();
+    return true;
+}
+
+static bool readFromFile(QPlainTextEdit *editor, const QString &path, QWidget *parent)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        QMessageBox::warning(parent, "Open failed", file.errorString());
+        return false;
+    }
+    QTextStream in(&file);
+    editor->setPlainText(in.readAll());
+    editor->document()->setModified(false);
+    return true;
+}
+
 // Main window that asks before closing if there are unsaved changes.
 class MainWindow : public QMainWindow
 {
@@ -141,6 +160,21 @@ int main(int argc, char *argv[])
     });
 
     QMenu *fileMenu = window.menuBar()->addMenu("File");
+
+    QAction *newFile = fileMenu->addAction("New");
+    newFile->setShortcut(QKeySequence::New);
+
+    QAction *openFile = fileMenu->addAction("Open");
+    openFile->setShortcut(QKeySequence::Open);
+
+    QObject::connect(openFile, &QAction::triggered, &window, [=, &currentPath, &window]()-> void {
+        QString path = QFileDialog::getOpenFileName(&window, "Open file", currentPath);
+        if (!path.isEmpty() && readFromFile(editor, path, &window)) {
+            currentPath = path;
+            window.setWindowTitle(QFileInfo(path).fileName() + " - " + header_text);
+        }
+    });
+
     QAction *saveAs = fileMenu->addAction("Save As…");
     saveAs->setShortcut(QKeySequence::SaveAs);
     QObject::connect(saveAs, &QAction::triggered, &window, [=, &currentPath, &window]() {
@@ -158,15 +192,15 @@ int main(int argc, char *argv[])
         saveAs->trigger();
     else
         saveToFile(editor, currentPath, &window);
-    });
+    });  
 
-    // Returns true if it is OK to close: nothing unsaved, saved, or discarded.
+    // Returns true if it is OK to continue: nothing unsaved, saved, or discarded.
     window.confirmClose = [=, &window]() {
         if (!editor->document()->isModified())
             return true;
         auto answer = QMessageBox::warning(
             &window, "Unsaved changes",
-            "Do you want to save your changes before quitting?",
+            "Do you want to save your changes before continuing?",
             QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
             QMessageBox::Save);
         if (answer == QMessageBox::Save) {
@@ -175,6 +209,14 @@ int main(int argc, char *argv[])
         }
         return answer == QMessageBox::Discard;
     };
+
+    // Connected here, after confirmClose exists. [&] because currentPath must be modified.
+    QObject::connect(newFile, &QAction::triggered, &window, [&]() {
+        if (window.confirmClose() && setNewFile(editor)) {
+            currentPath.clear();
+            window.setWindowTitle(header_text);
+        }
+    });
 
     window.show();
 
